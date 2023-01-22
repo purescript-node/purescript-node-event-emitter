@@ -1,4 +1,4 @@
-module Node.Global.EventEmitter where
+module Node.EventEmitter where
 
 import Prelude
 

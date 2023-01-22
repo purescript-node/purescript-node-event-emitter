@@ -1,4 +1,4 @@
-module Node.Global.EventEmitter.TypedEmitter
+module Node.EventEmitter.TypedEmitter
   ( TypedEmitter
   , new
   , asEmitterOnly
@@ -24,9 +24,9 @@ import Prelude
 import Data.Symbol (class IsSymbol, reflectSymbol)
 import Effect (Effect)
 import Effect.Uncurried (EffectFn1, EffectFn10, EffectFn2, EffectFn3, EffectFn4, EffectFn5, EffectFn6, EffectFn7, EffectFn8, EffectFn9)
-import Node.Global.EventEmitter (class UnsafeEmit, class UnsafeOffEvent, class UnsafeOnEvent, class UnsafeOnceListener, CanEmit, CanHandle, Emittable, EventEmitter, Handlers, NoEmit, NoHandle, unsafeEmit, unsafeOff, unsafeOn, unsafeOnce, unsafeSubscribe)
-import Node.Global.EventEmitter (class UnsafeEmit, class UnsafeOffEvent, class UnsafeOnEvent, class UnsafeOnceListener, CanEmit, CanHandle, Emittable, Handlers, NoEmit, NoHandle) as Exports
-import Node.Global.EventEmitter as EventEmitter
+import Node.EventEmitter (class UnsafeEmit, class UnsafeOffEvent, class UnsafeOnEvent, class UnsafeOnceListener, CanEmit, CanHandle, Emittable, EventEmitter, Handlers, NoEmit, NoHandle, unsafeEmit, unsafeOff, unsafeOn, unsafeOnce, unsafeSubscribe)
+import Node.EventEmitter (class UnsafeEmit, class UnsafeOffEvent, class UnsafeOnEvent, class UnsafeOnceListener, CanEmit, CanHandle, Emittable, Handlers, NoEmit, NoHandle) as Exports
+import Node.EventEmitter as EventEmitter
 import Prim.Row as Row
 import Safe.Coerce (coerce)
 import Type.Proxy (Proxy)
