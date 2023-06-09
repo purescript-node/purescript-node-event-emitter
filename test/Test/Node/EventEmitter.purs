@@ -42,34 +42,65 @@ spec = describe "event-emitter" do
       Ref.read ref
     expected `shouldEqual` actual
 
-  let
-    i = 20
-    s = "str"
-    arr = [ "foo", "bar" ]
-  for_ [ 0, 1, 2, 3 ] \argAmt -> do
-    it ("emit/handle roundtrips on " <> show argAmt <> " args") do
-      ref <- liftEffect $ Ref.new ""
-      ee <- liftEffect $ EventEmitter.new
-      let
-        expected = fold $ Array.take argAmt
-          [ show i
-          , show s
-          , show arr
-          ]
-      liftEffect $ handleVArgs ee \a b c -> do
+  describe "explicit types" do
+    let
+      i = 20
+      s = "str"
+      arr = [ "foo", "bar" ]
+    for_ [ 0, 1, 2, 3 ] \argAmt -> do
+      it ("emit/handle roundtrips on " <> show argAmt <> " args") do
+        ref <- liftEffect $ Ref.new ""
+        ee <- liftEffect $ EventEmitter.new
         let
-          actual = fold
-            [ foldMap show a
-            , foldMap show b
-            , foldMap show c
+          expected = fold $ Array.take argAmt
+            [ show i
+            , show s
+            , show arr
             ]
-        Ref.write actual ref
-      liftEffect $ void $ emitVArgs ee
-        (i <$ guard (argAmt >= 1))
-        (s <$ guard (argAmt >= 2))
-        (arr <$ guard (argAmt >= 3))
-      actual' <- liftEffect $ Ref.read ref
-      expected `shouldEqual` actual'
+        liftEffect $ handleVArgs ee \a b c -> do
+          let
+            actual = fold
+              [ foldMap show a
+              , foldMap show b
+              , foldMap show c
+              ]
+          Ref.write actual ref
+        liftEffect $ void $ emitVArgs ee
+          (i <$ guard (argAmt >= 1))
+          (s <$ guard (argAmt >= 2))
+          (arr <$ guard (argAmt >= 3))
+        actual' <- liftEffect $ Ref.read ref
+        expected `shouldEqual` actual'
+
+  describe "types inferred" do
+    let
+      i = 20
+      s = "str"
+      arr = [ "foo", "bar" ]
+    for_ [ 0, 1, 2, 3 ] \argAmt -> do
+      it ("emit/handle roundtrips on " <> show argAmt <> " args - verify type inference") do
+        ref <- liftEffect $ Ref.new ""
+        ee <- liftEffect $ EventEmitter.new
+        let
+          expected = fold $ Array.take argAmt
+            [ show i
+            , show s
+            , show arr
+            ]
+        liftEffect $ handleVArgs_checkTypeInference ee \a b c -> do
+          let
+            actual = fold
+              [ foldMap show a
+              , foldMap show b
+              , foldMap show c
+              ]
+          Ref.write actual ref
+        liftEffect $ void $ emitVArgs_checkTypeInference ee
+          (i <$ guard (argAmt >= 1))
+          (s <$ guard (argAmt >= 2))
+          (arr <$ guard (argAmt >= 3))
+        actual' <- liftEffect $ Ref.read ref
+        expected `shouldEqual` actual'
 
 eventName = "someEvent" :: String
 
@@ -109,6 +140,34 @@ handleVArgs ee cb = void do
              )
              EventEmitter
     )
+    ee
+    eventName
+    (mkEffectFn3 \i s a -> cb (toMaybe i) (toMaybe s) (toMaybe a))
+
+-- Haha! Type inference works on this monstrosity.
+emitVArgs_checkTypeInference
+  :: EventEmitter
+  -> Maybe Int
+  -> Maybe String
+  -> Maybe (Array String)
+  -> Effect Boolean
+emitVArgs_checkTypeInference ee = case _, _, _ of
+  Just i, Just s, Just a ->
+    runEffectFn4 (unsafeEmitFn ee) eventName i s a
+  Just i, Just s, Nothing ->
+    runEffectFn3 (unsafeEmitFn ee) eventName i s
+  Just i, Nothing, Nothing ->
+    runEffectFn2 (unsafeEmitFn ee) eventName i
+  _, _, _ ->
+    runEffectFn1 (unsafeEmitFn ee) eventName
+
+handleVArgs_checkTypeInference
+  :: EventEmitter
+  -> (Maybe Int -> Maybe String -> Maybe (Array String) -> Effect Unit)
+  -> Effect Unit
+handleVArgs_checkTypeInference ee cb = void do
+  runEffectFn3
+    unsafeOn
     ee
     eventName
     (mkEffectFn3 \i s a -> cb (toMaybe i) (toMaybe s) (toMaybe a))
