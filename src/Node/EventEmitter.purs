@@ -48,7 +48,8 @@ foreign import new :: Effect EventEmitter
 -- |   Just c, Just id, Just d ->
 -- |     runEffectFn4 (unsafeEmitFn h2s :: EffectFn4 String Code LastStreamId OpaqueData Unit) "goaway" c id d
 -- |   Just c, Just id, Nothing ->
--- |     runEffectFn3 (unsafeEmitFn h2s :: EffectFn3 String Code LastStreamId Unit) "goaway" c id
+-- |     -- If you're feeling lucky, omit the type annotations completely
+-- |     runEffectFn3 (unsafeEmitFn h2s) "goaway" c id
 -- |   Just c, Nothing, Nothing ->
 -- |     runEffectFn2 (unsafeEmitFn h2s :: EffectFn2 String Code LastStreamId Unit) "goaway" c
 -- |   _, _, _ ->
@@ -71,13 +72,12 @@ foreign import unsafeEmitFn :: forall f. EventEmitter -> f Boolean
 -- | onGoAway
 -- |   :: Http2Session
 -- |   -> (Maybe Code -> Maybe LastStreamId -> Maybe OpaqueData -> Effect Unit)
--- |   -> Effect Unit
--- | onGoAway h2s cb = 
+-- |   -> Effect Void
+-- | onGoAway h2s cb = void $
 -- |   runEffectFn3 
--- |     -- This could be written
--- |     -- (unsafeOn :: _ _ _ (EffectFn3 (Nullable Code) (Nullable LastStreamId) (Nullable OpaqueData) Unit)) Unit 
--- |     (unsafeOn :: EffectFn3 EventEmitter String (EffectFn3 (Nullable Code) (Nullable LastStreamId) (Nullable OpaqueData) Unit)) Unit 
--- |     h2s 
+-- |     -- If you're feeling lucky, omit the type annotations on `unsafeOn` completely.
+-- |     (unsafeOn :: EffectFn3 EventEmitter String (EffectFn3 (Nullable Code) (Nullable LastStreamId) (Nullable OpaqueData) Unit)) EventEmitter 
+-- |     (unsafeCoerce h2s :: EventEmitter)
 -- |     "goaway" 
 -- |     (mkEffectFn3 \c id d -> cb (toMaybe c) (toMaybe id) (toMaybe d))
 -- | ```
