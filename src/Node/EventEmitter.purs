@@ -81,22 +81,22 @@ foreign import unsafeEmitFn :: forall f. EventEmitter -> f Boolean
 -- |     "goaway" 
 -- |     (mkEffectFn3 \c id d -> cb (toMaybe c) (toMaybe id) (toMaybe d))
 -- | ```
-foreign import unsafeOn :: forall f. EffectFn3 EventEmitter String f EventEmitter
+foreign import unsafeOn :: forall f. EffectFn3 EventEmitter String f Unit
 
-foreign import unsafeOff :: forall f. EffectFn3 EventEmitter String f EventEmitter
+foreign import unsafeOff :: forall f. EffectFn3 EventEmitter String f Unit
 
 unsafeSubscribe :: forall f. EventEmitter -> String -> f -> Effect (Effect Unit)
 unsafeSubscribe ee eventName f = do
-  _ <- runEffectFn3 unsafeOn ee eventName f
-  pure $ void $ runEffectFn3 unsafeOff ee eventName f
+  runEffectFn3 unsafeOn ee eventName f
+  pure $ runEffectFn3 unsafeOff ee eventName f
 
-foreign import unsafeOnce :: forall f. EffectFn3 EventEmitter String f EventEmitter
-foreign import unsafePrependListener :: forall f. EffectFn3 EventEmitter String f EventEmitter
+foreign import unsafeOnce :: forall f. EffectFn3 EventEmitter String f Unit
+foreign import unsafePrependListener :: forall f. EffectFn3 EventEmitter String f Unit
 
 unsafePrependSubscribe :: forall f. EventEmitter -> String -> f -> Effect (Effect Unit)
 unsafePrependSubscribe ee eventName f = do
-  _ <- runEffectFn3 unsafePrependListener ee eventName f
-  pure $ void $ runEffectFn3 unsafeOff ee eventName f
+  runEffectFn3 unsafePrependListener ee eventName f
+  pure $ runEffectFn3 unsafeOff ee eventName f
 
 foreign import unsafePrependOnceListener :: forall f. EffectFn3 EventEmitter String f EventEmitter
 
