@@ -53,7 +53,7 @@ module Node.EventEmitter
   , setMaxListeners
   , setUnlimitedListeners
   , unsafeEmitFn
-  , EventHandle
+  , EventHandle(..)
   , errorHandle
   , on
   , onVia
