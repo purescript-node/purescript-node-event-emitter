@@ -3,7 +3,6 @@
   [ "aff"
   , "effect"
   , "either"
-  , "exceptions"
   , "foldable-traversable"
   , "functions"
   , "prelude"

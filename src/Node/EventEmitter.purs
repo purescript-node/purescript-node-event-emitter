@@ -57,7 +57,6 @@ module Node.EventEmitter
   , EventHandle(..)
   , newListenerHandle
   , removeListenerHandle
-  , errorHandle
   , on
   , onVia
   , onSubscribe
@@ -81,7 +80,6 @@ import Prelude
 import Data.Either (Either(..))
 import Data.Function.Uncurried (Fn3, runFn3)
 import Effect (Effect)
-import Effect.Exception (Error)
 import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn4, mkEffectFn1, mkEffectFn4, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn4)
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -171,11 +169,6 @@ newListenerHandle = EventHandle "newListener" $ \cb -> mkEffectFn1 \jsSymbol ->
 removeListenerHandle :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
 removeListenerHandle = EventHandle "removeListener" $ \cb -> mkEffectFn1 \jsSymbol ->
   cb $ runFn3 symbolOrStr Left Right jsSymbol
-
--- | Handler for the `error` event. Every `EventEmitter` seems to use this at some point,
--- | though some may change the type signature.
-errorHandle :: EventHandle EventEmitter (Error -> Effect Unit) (EffectFn1 Error Unit)
-errorHandle = EventHandle "error" $ \cb -> mkEffectFn1 cb
 
 -- | Adds the callback to the end of the `listeners` array and provides no way to remove it in the future.
 -- | Intended usage:
