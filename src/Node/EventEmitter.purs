@@ -47,6 +47,7 @@ module Node.EventEmitter
   ( EventEmitter
   , new
   , JsSymbol
+  , SymbolOrStr
   , eventNames
   , getMaxListeners
   , listenerCount
@@ -54,6 +55,8 @@ module Node.EventEmitter
   , setUnlimitedListeners
   , unsafeEmitFn
   , EventHandle(..)
+  , newListenerHandle
+  , removeListenerHandle
   , errorHandle
   , on
   , onVia
@@ -87,16 +90,16 @@ foreign import data EventEmitter :: Type
 -- | Create a new event emitter
 foreign import new :: Effect EventEmitter
 
-foreign import data StrOrSymbol :: Type
+foreign import data SymbolOrStr :: Type
 
-foreign import eventNamesImpl :: EventEmitter -> Array StrOrSymbol
+foreign import eventNamesImpl :: EventEmitter -> Array SymbolOrStr
 
 foreign import data JsSymbol :: Type
 
 eventNames :: EventEmitter -> Array (Either JsSymbol String)
-eventNames ee = map (\x -> runFn3 strOrSymbol Left Right x) $ eventNamesImpl ee
+eventNames ee = map (\x -> runFn3 symbolOrStr Left Right x) $ eventNamesImpl ee
 
-foreign import strOrSymbol :: Fn3 (forall a. JsSymbol -> Either JsSymbol a) (forall b. String -> Either b String) StrOrSymbol (Either JsSymbol String)
+foreign import symbolOrStr :: Fn3 (forall a. JsSymbol -> Either JsSymbol a) (forall b. String -> Either b String) SymbolOrStr (Either JsSymbol String)
 
 foreign import getMaxListenersImpl :: EffectFn1 EventEmitter Int
 
@@ -160,6 +163,14 @@ data EventHandle emitterType pureScriptCallback javaScriptCallback =
   EventHandle String (pureScriptCallback -> javaScriptCallback)
 
 type role EventHandle representational representational representational
+
+newListenerHandle :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
+newListenerHandle = EventHandle "newListener" $ \cb -> mkEffectFn1 \jsSymbol ->
+  cb $ runFn3 symbolOrStr Left Right jsSymbol
+
+removeListenerHandle :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
+removeListenerHandle = EventHandle "removeListener" $ \cb -> mkEffectFn1 \jsSymbol ->
+  cb $ runFn3 symbolOrStr Left Right jsSymbol
 
 -- | Handler for the `error` event. Every `EventEmitter` seems to use this at some point,
 -- | though some may change the type signature.

@@ -8,7 +8,7 @@ export { newImpl as new };
 // addEventListener - not implemented; alias to `on`
 export const unsafeEmitFn = (emitter) => emitter.emit.bind(emitter);
 export const eventNamesImpl = (emitter) => emitter.eventNames();
-export const strOrSymbol = (left, right, sym) => typeof sym == "symbol" ? left(sym) : right(sym);
+export const symbolOrStr = (left, right, sym) => typeof sym == "symbol" ? left(sym) : right(sym);
 export const getMaxListenersImpl = (emitter) => emitter.getMaxListeners();
 export const listenerCountImpl = (emitter, eventName) => emitter.listenerCount(eventName);
 // listeners - not implemented; returned functions cannot be used in type-safe way.
