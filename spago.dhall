@@ -1,6 +1,6 @@
 { name = "node-event-emitters"
 , dependencies =
-  [ "effect", "either", "functions", "prelude" ]
+  [ "effect", "either", "exceptions", "functions", "prelude", "unsafe-coerce" ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs" ]
 }
