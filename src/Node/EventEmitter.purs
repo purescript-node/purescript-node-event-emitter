@@ -1,370 +1,380 @@
-module Node.EventEmitter where
+-- | ## Handling events emitted by an `EventEmitter`
+-- |
+-- | One can add callbacks to an `EventEmitter` on two major axes:
+-- | - whether listener is added to the front (i.e. `on`) or back (i.e. `prependListener`) of the array
+-- | - whether a listener is automatically removed after the first event (i.e. `once` or `prependOnceListener`).
+-- |
+-- | Moreover, some types are in a chain of subclasses. For example, `Http2Server` extends `net.Server`, which extends `EventEmitter`.
+-- | This means some types (e.g. `Http2Server`) can use events defined in their superclass (e.g. `net.Server` and `EventEmitter`).
+-- |
+-- | This module provides functions for each of the 4 callback-adding functions above while accounting for the subtype problem above.
+-- | If `<fn>` is either `on`, `once`, `prependListener`, or `prependOnceListener`, then this module exposes
+-- | 1. `<fn>` - the standard function; there's no programmable way to remove the listener
+-- | 2. `<fn>Via` - same as 1 but accounts for subclass reuse
+-- | 3. `<fn>Subscribe` - the standard function; returns a callback that removes the listener
+-- | 4. `<fn>SubscribeVia` - same as 3 but accounts for subclass reuse
+-- |
+-- | The documentation for the `on*` functions provide an example of how to handle events.
+-- |
+-- | ## Defining events emitted by an `EventEmitter`
+-- |
+-- | Below, we'll provide an example for how to define an event handler for a type. Let's assume the following:
+-- | - There is a type `Foo` that exends `EventEmitter`
+-- | - `Foo` values can handle "bar" events
+-- | - a "bar" event takes the following callback: `EffectFn2 (Nullable Error) String Unit`
+-- | - the `String` value is always either "red", "green", or "blue"
+-- |
+-- | Then we would write
+-- | ```
+-- | data Color = Red | Green | Blue
+-- |
+-- | barHandle :: EventHandle Foo (Maybe Error -> Color -> Effect Unit) (EffectFn1 (Nullable Error) String Unit)
+-- | barHandle = EventHandle "bar" $ \psCb -> mkEffectFn2 \nullableError str ->
+-- |   psCb (toMaybe nullableError) case str of
+-- |     "red" -> Red
+-- |     "green" -> Green
+-- |     "blue" -> Blue
+-- |     _ -> unsafeCrashWith $ "Impossible String value for event 'bar': " <> show str
+-- | ```
+-- |
+-- | ## Emitting events via an `EventEmitter`
+-- |
+-- | Unfortunately, there isn't a good way to emit events safely in PureScript. If one wants to emit an event
+-- | in PureScript code that will be consumed by PureScript code, there are better abstractions to use than `EventEmitter`.
+-- | If one wants to emit an event in PureScript code that will be consumed by JavaScript code, then
+-- | the `unsafeEmitFn` function can be used to call n-ary functions. However, this is very unsafe. See its docs for more context.
+module Node.EventEmitter
+  ( EventEmitter
+  , new
+  , JsSymbol
+  , SymbolOrStr
+  , eventNames
+  , getMaxListeners
+  , listenerCount
+  , setMaxListeners
+  , setUnlimitedListeners
+  , unsafeEmitFn
+  , EventHandle(..)
+  , newListenerHandle
+  , removeListenerHandle
+  , on
+  , onVia
+  , onSubscribe
+  , onSubscribeVia
+  , once
+  , onceVia
+  , onceSubscribe
+  , onceSubscribeVia
+  , prependListener
+  , prependListenerVia
+  , prependListenerSubscribe
+  , prependListenerSubscribeVia
+  , prependOnceListener
+  , prependOnceListenerVia
+  , prependOnceListenerSubscribe
+  , prependOnceListenerSubscribeVia
+  ) where
 
 import Prelude
 
-import Data.Function.Uncurried (Fn2, runFn2)
+import Data.Either (Either(..))
+import Data.Function.Uncurried (Fn3, runFn3)
 import Effect (Effect)
-import Effect.Uncurried (EffectFn1, EffectFn10, EffectFn2, EffectFn3, EffectFn4, EffectFn5, EffectFn6, EffectFn7, EffectFn8, EffectFn9, mkEffectFn1, mkEffectFn10, mkEffectFn2, mkEffectFn3, mkEffectFn4, mkEffectFn5, mkEffectFn6, mkEffectFn7, mkEffectFn8, mkEffectFn9, runEffectFn10, runEffectFn2, runEffectFn3)
+import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn4, mkEffectFn1, mkEffectFn4, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn4)
 import Unsafe.Coerce (unsafeCoerce)
 
-data Handlers
+foreign import data EventEmitter :: Type
 
-foreign import data CanHandle :: Handlers
-foreign import data NoHandle :: Handlers
+-- | Create a new event emitter
+foreign import new :: Effect EventEmitter
 
-data Emittable
+foreign import data SymbolOrStr :: Type
 
-foreign import data CanEmit :: Emittable
-foreign import data NoEmit :: Emittable
+foreign import eventNamesImpl :: EventEmitter -> Array SymbolOrStr
 
-foreign import data EventEmitter :: Emittable -> Handlers -> Type
+foreign import data JsSymbol :: Type
 
-type role EventEmitter nominal nominal
+eventNames :: EventEmitter -> Array (Either JsSymbol String)
+eventNames ee = map (\x -> runFn3 symbolOrStr Left Right x) $ eventNamesImpl ee
 
-foreign import new :: Effect (EventEmitter CanEmit CanHandle)
+foreign import symbolOrStr :: Fn3 (forall a. JsSymbol -> Either JsSymbol a) (forall b. String -> Either b String) SymbolOrStr (Either JsSymbol String)
 
-asEmitterOnly :: forall handler. EventEmitter CanEmit handler -> EventEmitter NoEmit handler
-asEmitterOnly = unsafeCoerce
+foreign import getMaxListenersImpl :: EffectFn1 EventEmitter Int
 
-asHandlerOnly :: forall emit. EventEmitter emit CanHandle -> EventEmitter emit NoHandle
-asHandlerOnly = unsafeCoerce
+-- | By default, an event emitter can only have a maximum of 10 listeners
+-- | for a given event.
+getMaxListeners :: EventEmitter -> Effect Int
+getMaxListeners = runEffectFn1 getMaxListenersImpl
 
-setMaxListeners :: forall a b. Int -> EventEmitter a b -> Effect Unit
+foreign import listenerCountImpl :: EffectFn2 EventEmitter String Int
+
+listenerCount :: EventEmitter -> String -> Effect Int
+listenerCount emitter eventName = runEffectFn2 listenerCountImpl emitter eventName
+
+foreign import setMaxListenersImpl :: EffectFn2 EventEmitter Int Unit
+
+setMaxListeners :: Int -> EventEmitter -> Effect Unit
 setMaxListeners max emitter = runEffectFn2 setMaxListenersImpl emitter max
 
-setUnlimitedListeners :: forall a b. EventEmitter a b -> Effect Unit
+setUnlimitedListeners :: EventEmitter -> Effect Unit
 setUnlimitedListeners = setMaxListeners 0
 
-listenersLength :: forall a b. String -> EventEmitter a b -> Effect Int
-listenersLength eventName emitter = runEffectFn2 listenersLengthImpl emitter eventName
+-- | THIS IS UNSAFE! REALLY UNSAFE!
+-- | Gets the `emit` function for a particular `EventEmitter`, so that one can call n-ary functions.
+-- |
+-- | Given `http2session.goaway([code[, lastStreamID[, opaqueData]]])` as an example...
+-- | - https://nodejs.org/dist/latest-v18.x/docs/api/http2.html#event-goaway
+-- | - https://nodejs.org/dist/latest-v18.x/docs/api/http2.html#http2sessiongoawaycode-laststreamid-opaquedata
+-- |
+-- | We can then write a single function that handles all four cases:
+-- | ```
+-- | goAway
+-- |   :: Http2Session
+-- |   -> Maybe Code
+-- |   -> Maybe LastStreamId
+-- |   -> Maybe OpaqueData
+-- |   -> Effect Unit
+-- | goAway h2s = case _, _, _ of
+-- |   Just c, Just id, Just d ->
+-- |     runEffectFn4 (unsafeEmitFn h2s :: EffectFn4 String Code LastStreamId OpaqueData Unit) "goaway" c id d
+-- |   Just c, Just id, Nothing ->
+-- |     -- If you're feeling lucky, omit the type annotations completely
+-- |     runEffectFn3 (unsafeEmitFn h2s) "goaway" c id
+-- |   Just c, Nothing, Nothing ->
+-- |     runEffectFn2 (unsafeEmitFn h2s :: EffectFn2 String Code LastStreamId Unit) "goaway" c
+-- |   _, _, _ ->
+-- |     runEffectFn1 (unsafeEmitFn h2s :: EffectFn1 String Unit) "goaway"
+-- | ```
+-- | 
+-- | Synchronously calls each of the listeners registered for the event named `eventName`, 
+-- | in the order they were registered, passing the supplied arguments to each.
+-- | Returns `true` if the event had listeners, `false` otherwise.
+foreign import unsafeEmitFn :: forall f. EventEmitter -> f Boolean
 
-foreign import listenersLengthImpl :: forall a b. EffectFn2 (EventEmitter a b) String Int
+-- | Packs all the type information we need to call `on`/`once`/`prependListener`/`prependOnceListener`
+-- | with the correct callback function type.
+-- |
+-- | Naming convention: If the name of an event is `foo`, 
+-- | the corresponding PureScript `EventHandle` value should be called `fooHandle`.
+data EventHandle :: Type -> Type -> Type -> Type
+data EventHandle emitterType pureScriptCallback javaScriptCallback =
+  EventHandle String (pureScriptCallback -> javaScriptCallback)
 
-foreign import setMaxListenersImpl :: forall a b. EffectFn2 (EventEmitter a b) Int Unit
+type role EventHandle representational representational representational
 
-foreign import onImpl :: forall a cb. EffectFn3 (EventEmitter a CanHandle) String cb cb
-foreign import offImpl :: forall a cb. EffectFn3 (EventEmitter a CanHandle) String cb Unit
+newListenerHandle :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
+newListenerHandle = EventHandle "newListener" $ \cb -> mkEffectFn1 \jsSymbol ->
+  cb $ runFn3 symbolOrStr Left Right jsSymbol
 
-class UnsafeOnEvent callbackFn callbackEffectFn | callbackFn -> callbackEffectFn where
-  unsafeOn :: forall a. String -> callbackFn -> (EventEmitter a CanHandle) -> Effect callbackEffectFn
+removeListenerHandle :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
+removeListenerHandle = EventHandle "removeListener" $ \cb -> mkEffectFn1 \jsSymbol ->
+  cb $ runFn3 symbolOrStr Left Right jsSymbol
 
-unsafeAddEventListener
-  :: forall a callbackFn callbackEffectFn
-   . UnsafeOnEvent callbackFn callbackEffectFn
-  => String
-  -> callbackFn
-  -> EventEmitter a CanHandle
-  -> Effect callbackEffectFn
-unsafeAddEventListener = unsafeOn
-
-class UnsafeOffEvent callbackFn where
-  unsafeOff :: forall a. String -> callbackFn -> EventEmitter a CanHandle -> Effect Unit
-
-unsafeRemoveEventListener
-  :: forall a callbackFn
-   . UnsafeOffEvent callbackFn
-  => String
-  -> callbackFn
-  -> EventEmitter a CanHandle
+-- | Adds the callback to the end of the `listeners` array and provides no way to remove it in the future.
+-- | Intended usage:
+-- | ```
+-- | on errorHandle eventEmitter \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- | ```
+on
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> emitter
+  -> psCb
   -> Effect Unit
-unsafeRemoveEventListener = unsafeOff
+on (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn3 unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-unsafeSubscribe
-  :: forall a callbackFn callbackEffectFn
-   . UnsafeOnEvent callbackFn callbackEffectFn
-  => UnsafeOffEvent callbackEffectFn
-  => String
-  -> callbackFn
-  -> EventEmitter a CanHandle
+-- | A variant of `on` that works for subtypes. If a value has type `Foo`
+-- | and `Foo` is a class that extends `EventEmitter`, `Foo` can still use the `error` event.
+-- | If we provide a proof that `Foo` can be converted back to an `EventEmitter`, then we can
+-- | handle the `error` event as though the value that has type `Foo` had the type `EventEmitter`.
+-- |
+-- | Note: the proof function acts only as a witness of truth. It's not used to convert the
+-- | value of type `Foo` to a value of type `EventEmitter`.
+-- |
+-- | Intended usage:
+-- | ```
+-- | let proof = fooToEventEmitter eventEmitter
+-- | onVia proof errorHandle eventEmitter \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- | ```
+onVia
+  :: forall a emitter psCb jsCb
+   . (a -> emitter)
+  -> EventHandle emitter psCb jsCb
+  -> a
+  -> psCb
+  -> Effect Unit
+onVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn3 unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+once
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> emitter
+  -> psCb
+  -> Effect Unit
+once (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn3 unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+onceVia
+  :: forall a emitter psCb jsCb
+   . (a -> emitter)
+  -> EventHandle emitter psCb jsCb
+  -> a
+  -> psCb
+  -> Effect Unit
+onceVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn3 unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+prependListener
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> emitter
+  -> psCb
+  -> Effect Unit
+prependListener (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn3 unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+prependListenerVia
+  :: forall a emitter psCb jsCb
+   . (a -> emitter)
+  -> EventHandle emitter psCb jsCb
+  -> a
+  -> psCb
+  -> Effect Unit
+prependListenerVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn3 unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+prependOnceListener
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> emitter
+  -> psCb
+  -> Effect Unit
+prependOnceListener (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn3 unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+prependOnceListenerVia
+  :: forall a emitter psCb jsCb
+   . (a -> emitter)
+  -> EventHandle emitter psCb jsCb
+  -> a
+  -> psCb
+  -> Effect Unit
+prependOnceListenerVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn3 unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+-- | Internal function that ensures the JS callback function is the same one
+-- | used when both adding it and removing it from the listeners array.
+-- | Do not export this.
+subscribeSameFunction
+  :: forall emitter jsCb
+   . EffectFn4
+       (EffectFn3 emitter String jsCb Unit)
+       emitter
+       String
+       jsCb
+       (Effect Unit)
+subscribeSameFunction = mkEffectFn4 \onXFn eventEmitter eventName jsCb -> do
+  runEffectFn3 onXFn (unsafeCoerce eventEmitter) eventName jsCb
+  pure $ runEffectFn3 unsafeOff (unsafeCoerce eventEmitter) eventName jsCb
+
+-- | A variant of `on` that returns a callback that will remove the listener from the event emitter's listeners array.
+-- | Intended usage:
+-- | ```
+-- | removeLoggerCallback <- onSubscribe errorHandle eventEmitter \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- | -- sometime later...
+-- | removeLoggerCallback
+-- | ```
+onSubscribe
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> emitter
+  -> psCb
   -> Effect (Effect Unit)
-unsafeSubscribe event cb emitter = do
-  cb' <- unsafeOn event cb emitter
-  pure $ unsafeOff event cb' emitter
+onSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn4 subscribeSameFunction unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-instance UnsafeOnEvent (EffectFn10 a b c d e f g h i j Unit) (EffectFn10 a b c d e f g h i j Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn9 a b c d e f g h i Unit) (EffectFn9 a b c d e f g h i Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn8 a b c d e f g h Unit) (EffectFn8 a b c d e f g h Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn7 a b c d e f g Unit) (EffectFn7 a b c d e f g Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn6 a b c d e f Unit) (EffectFn6 a b c d e f Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn5 a b c d e Unit) (EffectFn5 a b c d e Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn4 a b c d Unit) (EffectFn4 a b c d Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn3 a b c Unit) (EffectFn3 a b c Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn2 a b Unit) (EffectFn2 a b Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
-else instance UnsafeOnEvent (EffectFn1 a Unit) (EffectFn1 a Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
+-- | A variant of `on` that returns a callback that will remove the listener from the event emitter's listeners array.
+-- | Intended usage:
+-- | ```
+-- | removeLoggerCallback <- onSubscribe errorHandle eventEmitter \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- | -- sometime later...
+-- | removeLoggerCallback
+-- | ```
+onSubscribeVia
+  :: forall a emitter psCb jsCb
+   . (a -> emitter)
+  -> EventHandle emitter psCb jsCb
+  -> a
+  -> psCb
+  -> Effect (Effect Unit)
+onSubscribeVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn4 subscribeSameFunction unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-else instance UnsafeOnEvent (a -> b -> c -> d -> e -> f -> g -> h -> i -> j -> Effect Unit) (EffectFn10 a b c d e f g h i j Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn10 fn) emitter
-else instance UnsafeOnEvent (a -> b -> c -> d -> e -> f -> g -> h -> i -> Effect Unit) (EffectFn9 a b c d e f g h i Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn9 fn) emitter
-else instance UnsafeOnEvent (a -> b -> c -> d -> e -> f -> g -> h -> Effect Unit) (EffectFn8 a b c d e f g h Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn8 fn) emitter
-else instance UnsafeOnEvent (a -> b -> c -> d -> e -> f -> g -> Effect Unit) (EffectFn7 a b c d e f g Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn7 fn) emitter
-else instance UnsafeOnEvent (a -> b -> c -> d -> e -> f -> Effect Unit) (EffectFn6 a b c d e f Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn6 fn) emitter
-else instance UnsafeOnEvent (a -> b -> c -> d -> e -> Effect Unit) (EffectFn5 a b c d e Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn5 fn) emitter
-else instance UnsafeOnEvent (a -> b -> c -> d -> Effect Unit) (EffectFn4 a b c d Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn4 fn) emitter
-else instance UnsafeOnEvent (a -> b -> c -> Effect Unit) (EffectFn3 a b c Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn3 fn) emitter
-else instance UnsafeOnEvent (a -> b -> Effect Unit) (EffectFn2 a b Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn2 fn) emitter
-else instance UnsafeOnEvent (a -> Effect Unit) (EffectFn1 a Unit) where
-  unsafeOn eventName fn emitter = unsafeOn eventName (mkEffectFn1 fn) emitter
-else instance UnsafeOnEvent (Effect Unit) (Effect Unit) where
-  unsafeOn eventName fn emitter = runEffectFn3 onImpl emitter eventName fn
+onceSubscribe
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> emitter
+  -> psCb
+  -> Effect (Effect Unit)
+onceSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn4 subscribeSameFunction unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-instance UnsafeOffEvent (EffectFn10 a b c d e f g h i j Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn9 a b c d e f g h i Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn8 a b c d e f g h Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn7 a b c d e f g Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn6 a b c d e f Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn5 a b c d e Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn4 a b c d Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn3 a b c Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn2 a b Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (EffectFn1 a Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
-else instance UnsafeOffEvent (Effect Unit) where
-  unsafeOff eventName fn emitter = runEffectFn3 offImpl emitter eventName fn
+onceSubscribeVia
+  :: forall a emitter psCb jsCb
+   . (a -> emitter)
+  -> EventHandle emitter psCb jsCb
+  -> a
+  -> psCb
+  -> Effect (Effect Unit)
+onceSubscribeVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn4 subscribeSameFunction unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-foreign import onceEventListener :: forall a cb. EffectFn3 (EventEmitter a CanHandle) String cb Unit
+prependListenerSubscribe
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> emitter
+  -> psCb
+  -> Effect (Effect Unit)
+prependListenerSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn4 subscribeSameFunction unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-class UnsafeOnceListener callbackFn where
-  unsafeOnce :: forall a. String -> callbackFn -> EventEmitter a CanHandle -> Effect Unit
+prependListenerSubscribeVia
+  :: forall a emitter psCb jsCb
+   . (a -> emitter)
+  -> EventHandle emitter psCb jsCb
+  -> a
+  -> psCb
+  -> Effect (Effect Unit)
+prependListenerSubscribeVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn4 subscribeSameFunction unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-instance UnsafeOnceListener (EffectFn10 a b c d e f g h i j Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn9 a b c d e f g h i Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn8 a b c d e f g h Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn7 a b c d e f g Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn6 a b c d e f Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn5 a b c d e Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn4 a b c d Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn3 a b c Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn2 a b Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
-else instance UnsafeOnceListener (EffectFn1 a Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
+prependOnceListenerSubscribe
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> emitter
+  -> psCb
+  -> Effect (Effect Unit)
+prependOnceListenerSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn4 subscribeSameFunction unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-else instance UnsafeOnceListener (a -> b -> c -> d -> e -> f -> g -> h -> i -> j -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn10 fn)
-else instance UnsafeOnceListener (a -> b -> c -> d -> e -> f -> g -> h -> i -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn9 fn)
-else instance UnsafeOnceListener (a -> b -> c -> d -> e -> f -> g -> h -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn8 fn)
-else instance UnsafeOnceListener (a -> b -> c -> d -> e -> f -> g -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn7 fn)
-else instance UnsafeOnceListener (a -> b -> c -> d -> e -> f -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn6 fn)
-else instance UnsafeOnceListener (a -> b -> c -> d -> e -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn5 fn)
-else instance UnsafeOnceListener (a -> b -> c -> d -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn4 fn)
-else instance UnsafeOnceListener (a -> b -> c -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn3 fn)
-else instance UnsafeOnceListener (a -> b -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn2 fn)
-else instance UnsafeOnceListener (a -> Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName (mkEffectFn1 fn)
-else instance UnsafeOnceListener (Effect Unit) where
-  unsafeOnce eventName fn emitter =
-    runEffectFn3 onceEventListener emitter eventName fn
+prependOnceListenerSubscribeVia
+  :: forall a emitter psCb jsCb
+   . (a -> emitter)
+  -> EventHandle emitter psCb jsCb
+  -> a
+  -> psCb
+  -> Effect (Effect Unit)
+prependOnceListenerSubscribeVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
+  runEffectFn4 subscribeSameFunction unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-foreign import undefined :: forall a. a
-
-foreign import emitImpl :: forall x a b c d e f g h i j. Fn2 (EventEmitter CanEmit x) String (EffectFn10 a b c d e f g h i j Boolean)
-
-class UnsafeEmit a where
-  unsafeEmit :: forall x. (EventEmitter CanEmit x) -> String -> a
-
-instance UnsafeEmit (a -> b -> c -> d -> e -> f -> g -> h -> i -> j -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      a3
-      a4
-      a5
-      a6
-      a7
-      a8
-      a9
-      a10
-else instance UnsafeEmit (a -> b -> c -> d -> e -> f -> g -> h -> i -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 a3 a4 a5 a6 a7 a8 a9 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      a3
-      a4
-      a5
-      a6
-      a7
-      a8
-      a9
-      undefined
-else instance UnsafeEmit (a -> b -> c -> d -> e -> f -> g -> h -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 a3 a4 a5 a6 a7 a8 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      a3
-      a4
-      a5
-      a6
-      a7
-      a8
-      undefined
-      undefined
-else instance UnsafeEmit (a -> b -> c -> d -> e -> f -> g -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 a3 a4 a5 a6 a7 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      a3
-      a4
-      a5
-      a6
-      a7
-      undefined
-      undefined
-      undefined
-else instance UnsafeEmit (a -> b -> c -> d -> e -> f -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 a3 a4 a5 a6 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      a3
-      a4
-      a5
-      a6
-      undefined
-      undefined
-      undefined
-      undefined
-else instance UnsafeEmit (a -> b -> c -> d -> e -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 a3 a4 a5 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      a3
-      a4
-      a5
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-else instance UnsafeEmit (a -> b -> c -> d -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 a3 a4 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      a3
-      a4
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-else instance UnsafeEmit (a -> b -> c -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 a3 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      a3
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-else instance UnsafeEmit (a -> b -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 a2 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      a2
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-else instance UnsafeEmit (a -> Effect Boolean) where
-  unsafeEmit emitter eventName a1 = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      a1
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-else instance UnsafeEmit (Effect Boolean) where
-  unsafeEmit emitter eventName = do
-    runEffectFn10 (runFn2 emitImpl emitter eventName)
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
-      undefined
+foreign import unsafeOn :: forall f. EffectFn3 EventEmitter String f Unit
+foreign import unsafeOff :: forall f. EffectFn3 EventEmitter String f Unit
+foreign import unsafeOnce :: forall f. EffectFn3 EventEmitter String f Unit
+foreign import unsafePrependListener :: forall f. EffectFn3 EventEmitter String f Unit
+foreign import unsafePrependOnceListener :: forall f. EffectFn3 EventEmitter String f Unit
