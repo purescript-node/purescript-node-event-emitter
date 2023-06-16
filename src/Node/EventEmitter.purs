@@ -4,15 +4,10 @@
 -- | - whether listener is added to the front (i.e. `on`) or back (i.e. `prependListener`) of the array
 -- | - whether a listener is automatically removed after the first event (i.e. `once` or `prependOnceListener`).
 -- |
--- | Moreover, some types are in a chain of subclasses. For example, `Http2Server` extends `net.Server`, which extends `EventEmitter`.
--- | This means some types (e.g. `Http2Server`) can use events defined in their superclass (e.g. `net.Server` and `EventEmitter`).
--- |
--- | This module provides functions for each of the 4 callback-adding functions above while accounting for the subtype problem above.
+-- | This module provides functions for each of the 2 callback-adding functions
 -- | If `<fn>` is either `on`, `once`, `prependListener`, or `prependOnceListener`, then this module exposes
--- | 1. `<fn>` - the standard function; there's no programmable way to remove the listener
--- | 2. `<fn>Via` - same as 1 but accounts for subclass reuse
--- | 3. `<fn>Subscribe` - the standard function; returns a callback that removes the listener
--- | 4. `<fn>SubscribeVia` - same as 3 but accounts for subclass reuse
+-- | 1. `<fn>` - no programmable way to remove the listener
+-- | 2. `<fn>Subscribe` - returns a callback that removes the listener
 -- |
 -- | The documentation for the `on*` functions provide an example of how to handle events.
 -- |
@@ -58,21 +53,13 @@ module Node.EventEmitter
   , newListenerHandle
   , removeListenerHandle
   , on
-  , onVia
   , onSubscribe
-  , onSubscribeVia
   , once
-  , onceVia
   , onceSubscribe
-  , onceSubscribeVia
   , prependListener
-  , prependListenerVia
   , prependListenerSubscribe
-  , prependListenerSubscribeVia
   , prependOnceListener
-  , prependOnceListenerVia
   , prependOnceListenerSubscribe
-  , prependOnceListenerSubscribeVia
   ) where
 
 import Prelude
@@ -185,30 +172,6 @@ on
 on (EventHandle eventName toJsCb) eventEmitter psCb =
   runEffectFn3 unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
--- | A variant of `on` that works for subtypes. If a value has type `Foo`
--- | and `Foo` is a class that extends `EventEmitter`, `Foo` can still use the `error` event.
--- | If we provide a proof that `Foo` can be converted back to an `EventEmitter`, then we can
--- | handle the `error` event as though the value that has type `Foo` had the type `EventEmitter`.
--- |
--- | Note: the proof function acts only as a witness of truth. It's not used to convert the
--- | value of type `Foo` to a value of type `EventEmitter`.
--- |
--- | Intended usage:
--- | ```
--- | let proof = fooToEventEmitter eventEmitter
--- | onVia proof errorHandle eventEmitter \error -> do
--- |   log $ "Got error: " <> Exception.message error
--- | ```
-onVia
-  :: forall a emitter psCb jsCb
-   . (a -> emitter)
-  -> EventHandle emitter psCb jsCb
-  -> a
-  -> psCb
-  -> Effect Unit
-onVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn3 unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
 once
   :: forall emitter psCb jsCb
    . EventHandle emitter psCb jsCb
@@ -216,16 +179,6 @@ once
   -> psCb
   -> Effect Unit
 once (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn3 unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
-onceVia
-  :: forall a emitter psCb jsCb
-   . (a -> emitter)
-  -> EventHandle emitter psCb jsCb
-  -> a
-  -> psCb
-  -> Effect Unit
-onceVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
   runEffectFn3 unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
 prependListener
@@ -237,16 +190,6 @@ prependListener
 prependListener (EventHandle eventName toJsCb) eventEmitter psCb =
   runEffectFn3 unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-prependListenerVia
-  :: forall a emitter psCb jsCb
-   . (a -> emitter)
-  -> EventHandle emitter psCb jsCb
-  -> a
-  -> psCb
-  -> Effect Unit
-prependListenerVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn3 unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
 prependOnceListener
   :: forall emitter psCb jsCb
    . EventHandle emitter psCb jsCb
@@ -254,16 +197,6 @@ prependOnceListener
   -> psCb
   -> Effect Unit
 prependOnceListener (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn3 unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
-prependOnceListenerVia
-  :: forall a emitter psCb jsCb
-   . (a -> emitter)
-  -> EventHandle emitter psCb jsCb
-  -> a
-  -> psCb
-  -> Effect Unit
-prependOnceListenerVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
   runEffectFn3 unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
 -- | Internal function that ensures the JS callback function is the same one
@@ -298,24 +231,6 @@ onSubscribe
 onSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
   runEffectFn4 subscribeSameFunction unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
--- | A variant of `on` that returns a callback that will remove the listener from the event emitter's listeners array.
--- | Intended usage:
--- | ```
--- | removeLoggerCallback <- onSubscribe errorHandle eventEmitter \error -> do
--- |   log $ "Got error: " <> Exception.message error
--- | -- sometime later...
--- | removeLoggerCallback
--- | ```
-onSubscribeVia
-  :: forall a emitter psCb jsCb
-   . (a -> emitter)
-  -> EventHandle emitter psCb jsCb
-  -> a
-  -> psCb
-  -> Effect (Effect Unit)
-onSubscribeVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn4 subscribeSameFunction unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
 onceSubscribe
   :: forall emitter psCb jsCb
    . EventHandle emitter psCb jsCb
@@ -323,16 +238,6 @@ onceSubscribe
   -> psCb
   -> Effect (Effect Unit)
 onceSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn4 subscribeSameFunction unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
-onceSubscribeVia
-  :: forall a emitter psCb jsCb
-   . (a -> emitter)
-  -> EventHandle emitter psCb jsCb
-  -> a
-  -> psCb
-  -> Effect (Effect Unit)
-onceSubscribeVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
   runEffectFn4 subscribeSameFunction unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
 prependListenerSubscribe
@@ -344,16 +249,6 @@ prependListenerSubscribe
 prependListenerSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
   runEffectFn4 subscribeSameFunction unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
-prependListenerSubscribeVia
-  :: forall a emitter psCb jsCb
-   . (a -> emitter)
-  -> EventHandle emitter psCb jsCb
-  -> a
-  -> psCb
-  -> Effect (Effect Unit)
-prependListenerSubscribeVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn4 subscribeSameFunction unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
 prependOnceListenerSubscribe
   :: forall emitter psCb jsCb
    . EventHandle emitter psCb jsCb
@@ -361,16 +256,6 @@ prependOnceListenerSubscribe
   -> psCb
   -> Effect (Effect Unit)
 prependOnceListenerSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn4 subscribeSameFunction unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
-prependOnceListenerSubscribeVia
-  :: forall a emitter psCb jsCb
-   . (a -> emitter)
-  -> EventHandle emitter psCb jsCb
-  -> a
-  -> psCb
-  -> Effect (Effect Unit)
-prependOnceListenerSubscribeVia _ (EventHandle eventName toJsCb) eventEmitter psCb =
   runEffectFn4 subscribeSameFunction unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
 foreign import unsafeOn :: forall f. EffectFn3 EventEmitter String f Unit
