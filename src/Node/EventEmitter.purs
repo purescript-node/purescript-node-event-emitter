@@ -21,8 +21,9 @@
 -- | ```
 -- | data Color = Red | Green | Blue
 -- |
--- | barHandle :: EventHandle Foo (Maybe Error -> Color -> Effect Unit) (EffectFn1 (Nullable Error) String Unit)
--- | barHandle = EventHandle "bar" $ \psCb -> mkEffectFn2 \nullableError str ->
+-- | -- Note: see docs on `EventHandle` for the below naming convention justification of suffixing `H`.
+-- | barH :: EventHandle Foo (Maybe Error -> Color -> Effect Unit) (EffectFn1 (Nullable Error) String Unit)
+-- | barH = EventHandle "bar" $ \psCb -> mkEffectFn2 \nullableError str ->
 -- |   psCb (toMaybe nullableError) case str of
 -- |     "red" -> Red
 -- |     "green" -> Green
@@ -48,8 +49,8 @@ module Node.EventEmitter
   , setUnlimitedListeners
   , unsafeEmitFn
   , EventHandle(..)
-  , newListenerHandle
-  , removeListenerHandle
+  , newListenerH
+  , removeListenerH
   , on
   , on_
   , once
@@ -139,20 +140,23 @@ foreign import unsafeEmitFn :: forall f. EventEmitter -> f Boolean
 -- | Packs all the type information we need to call `on`/`once`/`prependListener`/`prependOnceListener`
 -- | with the correct callback function type.
 -- |
--- | Naming convention: If the name of an event is `foo`, 
--- | the corresponding PureScript `EventHandle` value should be called `fooHandle`.
+-- | **Naming convention**: If the name of an event is `foo`, 
+-- | the corresponding PureScript `EventHandle` value should be called `fooH`.
+-- | The `H` suffix is what prevent name conflicts in two situations:
+-- | 1. similarly-named methods (e.g. the `"close"` event and the `close` method)
+-- | 2. PureScript keywords (e.g. the `"data"` event)
 data EventHandle :: Type -> Type -> Type -> Type
 data EventHandle emitterType pureScriptCallback javaScriptCallback =
   EventHandle String (pureScriptCallback -> javaScriptCallback)
 
 type role EventHandle representational representational representational
 
-newListenerHandle :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
-newListenerHandle = EventHandle "newListener" $ \cb -> mkEffectFn1 \jsSymbol ->
+newListenerH :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
+newListenerH = EventHandle "newListener" $ \cb -> mkEffectFn1 \jsSymbol ->
   cb $ runFn3 symbolOrStr Left Right jsSymbol
 
-removeListenerHandle :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
-removeListenerHandle = EventHandle "removeListener" $ \cb -> mkEffectFn1 \jsSymbol ->
+removeListenerH :: EventHandle EventEmitter (Either JsSymbol String -> Effect Unit) (EffectFn1 SymbolOrStr Unit)
+removeListenerH = EventHandle "removeListener" $ \cb -> mkEffectFn1 \jsSymbol ->
   cb $ runFn3 symbolOrStr Left Right jsSymbol
 
 -- | Adds the listener to the **end** of the `listeners` array.

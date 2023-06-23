@@ -13,8 +13,8 @@ import Node.EventEmitter.UtilTypes (EventHandle1)
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual)
 
-fooHandle :: EventHandle1 EventEmitter String
-fooHandle = EventHandle "foo" mkEffectFn1
+fooH :: EventHandle1 EventEmitter String
+fooH = EventHandle "foo" mkEffectFn1
 
 spec :: Spec Unit
 spec = describe "event-emitter" do
@@ -42,7 +42,7 @@ spec = describe "event-emitter" do
           let expected = "bar"
           ref <- Ref.new ""
           ee <- EventEmitter.new
-          ee # fn fooHandle \val -> do
+          ee # fn fooH \val -> do
             Ref.write val ref
           void $ runEffectFn2 (unsafeEmitFn ee) "foo" expected
           val <- Ref.read ref
@@ -62,7 +62,7 @@ spec = describe "event-emitter" do
           let expected = "bar"
           ref <- Ref.new ""
           ee <- EventEmitter.new
-          void $ ee # fn fooHandle \val -> do
+          void $ ee # fn fooH \val -> do
             Ref.write val ref
           void $ runEffectFn2 (unsafeEmitFn ee) "foo" expected
           val <- Ref.read ref
@@ -72,7 +72,7 @@ spec = describe "event-emitter" do
         liftEffect do
           ref <- Ref.new ""
           ee <- EventEmitter.new
-          remove <- ee # fn fooHandle \val -> do
+          remove <- ee # fn fooH \val -> do
             Ref.write val ref
           remove
           void $ runEffectFn2 (unsafeEmitFn ee) "foo" "bar"
