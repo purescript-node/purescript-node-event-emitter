@@ -19,16 +19,28 @@
 -- |
 -- | Then we would write
 -- | ```
--- | data Color = Red | Green | Blue
+-- | data Color 
+-- |   = Red 
+-- |   | Green 
+-- |   | Blue
 -- |
--- | -- Note: see docs on `EventHandle` for the below naming convention justification of suffixing `H`.
--- | barH :: EventHandle Foo (Maybe Error -> Color -> Effect Unit) (EffectFn1 (Nullable Error) String Unit)
--- | barH = EventHandle "bar" $ \psCb -> mkEffectFn2 \nullableError str ->
--- |   psCb (toMaybe nullableError) case str of
--- |     "red" -> Red
--- |     "green" -> Green
--- |     "blue" -> Blue
--- |     _ -> unsafeCrashWith $ "Impossible String value for event 'bar': " <> show str
+-- | -- Note: see docs on `EventHandle` 
+-- | -- for the below naming convention justification 
+-- | -- of suffixing an event name with `H`.
+-- | barH 
+-- |   :: EventHandle 
+-- |        Foo 
+-- |        (Maybe Error -> Color -> Effect Unit) 
+-- |        (EffectFn1 (Nullable Error) String Unit)
+-- | barH = EventHandle "bar" $ \psCb -> 
+-- |   mkEffectFn2 \nullableError str ->
+-- |     psCb (toMaybe nullableError) case str of
+-- |       "red" -> Red
+-- |       "green" -> Green
+-- |       "blue" -> Blue
+-- |       _ -> 
+-- |         unsafeCrashWith $ 
+-- |           "Impossible String value for event 'bar': " <> show str
 -- | ```
 -- |
 -- | ## Emitting events via an `EventEmitter`
