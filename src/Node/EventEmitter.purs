@@ -4,12 +4,10 @@
 -- | - whether listener is added to the front (i.e. `on`) or back (i.e. `prependListener`) of the array
 -- | - whether a listener is automatically removed after the first event (i.e. `once` or `prependOnceListener`).
 -- |
--- | This module provides functions for each of the 2 callback-adding functions
+-- | This module provides functions for each of the above 4 callback-adding functions
 -- | If `<fn>` is either `on`, `once`, `prependListener`, or `prependOnceListener`, then this module exposes
--- | 1. `<fn>` - no programmable way to remove the listener
--- | 2. `<fn>Subscribe` - returns a callback that removes the listener
--- |
--- | The documentation for the `on*` functions provide an example of how to handle events.
+-- | 1. `<fn>` - returns a callback that removes the listener
+-- | 2. `<fn>_` - no programmable way to remove the listener
 -- |
 -- | ## Defining events emitted by an `EventEmitter`
 -- |
@@ -53,13 +51,13 @@ module Node.EventEmitter
   , newListenerHandle
   , removeListenerHandle
   , on
-  , onSubscribe
+  , on_
   , once
-  , onceSubscribe
+  , once_
   , prependListener
-  , prependListenerSubscribe
+  , prependListener_
   , prependOnceListener
-  , prependOnceListenerSubscribe
+  , prependOnceListener_
   ) where
 
 import Prelude
@@ -157,46 +155,158 @@ removeListenerHandle :: EventHandle EventEmitter (Either JsSymbol String -> Effe
 removeListenerHandle = EventHandle "removeListener" $ \cb -> mkEffectFn1 \jsSymbol ->
   cb $ runFn3 symbolOrStr Left Right jsSymbol
 
--- | Adds the callback to the end of the `listeners` array and provides no way to remove it in the future.
+-- | Adds the listener to the **end** of the `listeners` array.
+-- | Returns a callback that will remove the listener from the event emitter's `listeners` array.
+-- | If the listener removal callback isn't needed, use `on_`.
+-- |
 -- | Intended usage:
 -- | ```
--- | on errorHandle eventEmitter \error -> do
+-- | removeLoggerCallback <- eventEmitter # on errorHandle \error -> do
 -- |   log $ "Got error: " <> Exception.message error
+-- |   log $ "This listener will now be removed."
+-- | -- sometime later...
+-- | removeLoggerCallback
 -- | ```
 on
   :: forall emitter psCb jsCb
    . EventHandle emitter psCb jsCb
-  -> emitter
   -> psCb
+  -> emitter
+  -> Effect (Effect Unit)
+on (EventHandle eventName toJsCb) psCb eventEmitter =
+  runEffectFn4 subscribeSameFunction unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+-- | Adds the callback to the **end** of the `listeners` array and provides no way to remove the listener in the future.
+-- | If you need a callback to remove the listener in the future, use `on`.
+-- | Intended usage:
+-- | ```
+-- | eventEmitter # on_ errorHandle  \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- | ```
+on_
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> psCb
+  -> emitter
   -> Effect Unit
-on (EventHandle eventName toJsCb) eventEmitter psCb =
+on_ (EventHandle eventName toJsCb) psCb eventEmitter =
   runEffectFn3 unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
+-- | Adds the listener to the **end** of the `listeners` array. The listener will be removed after it is invoked once.
+-- | Returns a callback that will remove the listener from the event emitter's listeners array.
+-- | If the listener removal callback isn't needed, use `once_`.
+-- |
+-- | Intended usage:
+-- | ```
+-- | removeLoggerCallback <- eventEmitter # once errorHandle \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- |   log $ "This listener will now be removed."
+-- | -- sometime later...
+-- | removeLoggerCallback
+-- | ```
 once
   :: forall emitter psCb jsCb
    . EventHandle emitter psCb jsCb
-  -> emitter
   -> psCb
+  -> emitter
+  -> Effect (Effect Unit)
+once (EventHandle eventName toJsCb) psCb eventEmitter =
+  runEffectFn4 subscribeSameFunction unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+-- | Adds the listener to the **end** of the `listeners` array. The listener will be removed after it is invoked once.
+-- | Returns a callback that will remove the listener from the event emitter's listeners array.
+-- | If you need a callback to remove the listener in the future, use `once`.
+-- |
+-- | Intended usage:
+-- | ```
+-- | eventEmitter # once_ errorHandle \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- | ```
+once_
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> psCb
+  -> emitter
   -> Effect Unit
-once (EventHandle eventName toJsCb) eventEmitter psCb =
+once_ (EventHandle eventName toJsCb) psCb eventEmitter =
   runEffectFn3 unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
+-- | Adds the listener to the **start** of the `listeners` array.
+-- | Returns a callback that will remove the listener from the event emitter's listeners array.
+-- | If the listener removal callback isn't needed, use `prependListener_`.
+-- |
+-- | Intended usage:
+-- | ```
+-- | removeLoggerCallback <- eventEmitter # prependListener errorHandle \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- |   log $ "This listener will now be removed."
+-- | -- sometime later...
+-- | removeLoggerCallback
+-- | ```
 prependListener
   :: forall emitter psCb jsCb
    . EventHandle emitter psCb jsCb
-  -> emitter
   -> psCb
+  -> emitter
+  -> Effect (Effect Unit)
+prependListener (EventHandle eventName toJsCb) psCb eventEmitter =
+  runEffectFn4 subscribeSameFunction unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+-- | Adds the listener to the **start** of the `listeners` array.
+-- | Returns a callback that will remove the listener from the event emitter's listeners array.
+-- | If the listener removal callback isn't needed, use `prependListener`.
+-- |
+-- | Intended usage:
+-- | ```
+-- | eventEmitter # prependListener_ errorHandle \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- | ```
+prependListener_
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> psCb
+  -> emitter
   -> Effect Unit
-prependListener (EventHandle eventName toJsCb) eventEmitter psCb =
+prependListener_ (EventHandle eventName toJsCb) psCb eventEmitter =
   runEffectFn3 unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
+-- | Adds the listener to the **start** of the `listeners` array. The listener will be removed after it is invoked once.
+-- | Returns a callback that will remove the listener from the event emitter's listeners array.
+-- | If the listener removal callback isn't needed, use `prependOnceListener_`.
+-- |
+-- | Intended usage:
+-- | ```
+-- | removeLoggerCallback <- eventEmitter # prependOnceListener errorHandle \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- |   log $ "This listener will now be removed."
+-- | -- sometime later...
+-- | removeLoggerCallback
+-- | ```
 prependOnceListener
   :: forall emitter psCb jsCb
    . EventHandle emitter psCb jsCb
-  -> emitter
   -> psCb
+  -> emitter
+  -> Effect (Effect Unit)
+prependOnceListener (EventHandle eventName toJsCb) psCb eventEmitter =
+  runEffectFn4 subscribeSameFunction unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
+
+-- | Adds the listener to the **start** of the `listeners` array. The listener will be removed after it is invoked once.
+-- | Returns a callback that will remove the listener from the event emitter's listeners array.
+-- | If you need a callback to remove the listener in the future, use `prependOnceListener`.
+-- |
+-- | Intended usage:
+-- | ```
+-- | eventEmitter # prependOnceListener_ errorHandle \error -> do
+-- |   log $ "Got error: " <> Exception.message error
+-- | ```
+prependOnceListener_
+  :: forall emitter psCb jsCb
+   . EventHandle emitter psCb jsCb
+  -> psCb
+  -> emitter
   -> Effect Unit
-prependOnceListener (EventHandle eventName toJsCb) eventEmitter psCb =
+prependOnceListener_ (EventHandle eventName toJsCb) psCb eventEmitter =
   runEffectFn3 unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
 -- | Internal function that ensures the JS callback function is the same one
@@ -213,50 +323,6 @@ subscribeSameFunction
 subscribeSameFunction = mkEffectFn4 \onXFn eventEmitter eventName jsCb -> do
   runEffectFn3 onXFn (unsafeCoerce eventEmitter) eventName jsCb
   pure $ runEffectFn3 unsafeOff (unsafeCoerce eventEmitter) eventName jsCb
-
--- | A variant of `on` that returns a callback that will remove the listener from the event emitter's listeners array.
--- | Intended usage:
--- | ```
--- | removeLoggerCallback <- onSubscribe errorHandle eventEmitter \error -> do
--- |   log $ "Got error: " <> Exception.message error
--- | -- sometime later...
--- | removeLoggerCallback
--- | ```
-onSubscribe
-  :: forall emitter psCb jsCb
-   . EventHandle emitter psCb jsCb
-  -> emitter
-  -> psCb
-  -> Effect (Effect Unit)
-onSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn4 subscribeSameFunction unsafeOn (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
-onceSubscribe
-  :: forall emitter psCb jsCb
-   . EventHandle emitter psCb jsCb
-  -> emitter
-  -> psCb
-  -> Effect (Effect Unit)
-onceSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn4 subscribeSameFunction unsafeOnce (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
-prependListenerSubscribe
-  :: forall emitter psCb jsCb
-   . EventHandle emitter psCb jsCb
-  -> emitter
-  -> psCb
-  -> Effect (Effect Unit)
-prependListenerSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn4 subscribeSameFunction unsafePrependListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
-
-prependOnceListenerSubscribe
-  :: forall emitter psCb jsCb
-   . EventHandle emitter psCb jsCb
-  -> emitter
-  -> psCb
-  -> Effect (Effect Unit)
-prependOnceListenerSubscribe (EventHandle eventName toJsCb) eventEmitter psCb =
-  runEffectFn4 subscribeSameFunction unsafePrependOnceListener (unsafeCoerce eventEmitter) eventName $ toJsCb psCb
 
 foreign import unsafeOn :: forall f. EffectFn3 EventEmitter String f Unit
 foreign import unsafeOff :: forall f. EffectFn3 EventEmitter String f Unit

@@ -7,7 +7,7 @@ import Data.Tuple.Nested ((/\))
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Effect.Uncurried (EffectFn1, EffectFn2, mkEffectFn1, runEffectFn1, runEffectFn2, runEffectFn3)
-import Node.EventEmitter (EventEmitter, EventHandle(..), on, onSubscribe, once, onceSubscribe, prependListener, prependListenerSubscribe, prependOnceListener, prependOnceListenerSubscribe, unsafeEmitFn)
+import Node.EventEmitter (EventEmitter, EventHandle(..), on, on_, once, once_, prependListener, prependListener_, prependOnceListener, prependOnceListener_, unsafeEmitFn)
 import Node.EventEmitter as EventEmitter
 import Node.EventEmitter.UtilTypes (EventHandle1)
 import Test.Spec (Spec, describe, it)
@@ -31,10 +31,10 @@ spec = describe "event-emitter" do
   describe "standard functions" do
     let
       fns =
-        [ "on" /\ on
-        , "once" /\ once
-        , "prependListener" /\ prependListener
-        , "prependOnceListener" /\ prependOnceListener
+        [ "on_" /\ on_
+        , "once_" /\ once_
+        , "prependListener_" /\ prependListener_
+        , "prependOnceListener_" /\ prependOnceListener_
         ]
     for_ fns \(fnName /\ fn) -> do
       it (fnName <> " works") do
@@ -42,7 +42,7 @@ spec = describe "event-emitter" do
           let expected = "bar"
           ref <- Ref.new ""
           ee <- EventEmitter.new
-          fn fooHandle ee \val -> do
+          ee # fn fooHandle \val -> do
             Ref.write val ref
           void $ runEffectFn2 (unsafeEmitFn ee) "foo" expected
           val <- Ref.read ref
@@ -51,10 +51,10 @@ spec = describe "event-emitter" do
   describe "subscribe functions" do
     let
       fns =
-        [ "onSubscribe" /\ onSubscribe
-        , "onceSubscribe" /\ onceSubscribe
-        , "prependListenerSubscribe" /\ prependListenerSubscribe
-        , "prependOnceListenerSubscribe" /\ prependOnceListenerSubscribe
+        [ "onSubscribe" /\ on
+        , "onceSubscribe" /\ once
+        , "prependListenerSubscribe" /\ prependListener
+        , "prependOnceListenerSubscribe" /\ prependOnceListener
         ]
     for_ fns \(fnName /\ fn) -> do
       it (fnName <> " - normal call works") do
@@ -62,7 +62,7 @@ spec = describe "event-emitter" do
           let expected = "bar"
           ref <- Ref.new ""
           ee <- EventEmitter.new
-          void $ fn fooHandle ee \val -> do
+          void $ ee # fn fooHandle \val -> do
             Ref.write val ref
           void $ runEffectFn2 (unsafeEmitFn ee) "foo" expected
           val <- Ref.read ref
@@ -72,7 +72,7 @@ spec = describe "event-emitter" do
         liftEffect do
           ref <- Ref.new ""
           ee <- EventEmitter.new
-          remove <- fn fooHandle ee \val -> do
+          remove <- ee # fn fooHandle \val -> do
             Ref.write val ref
           remove
           void $ runEffectFn2 (unsafeEmitFn ee) "foo" "bar"
