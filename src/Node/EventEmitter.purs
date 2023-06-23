@@ -7,7 +7,7 @@
 -- | This module provides functions for each of the above 4 callback-adding functions
 -- | If `<fn>` is either `on`, `once`, `prependListener`, or `prependOnceListener`, then this module exposes
 -- | 1. `<fn>` - returns a callback that removes the listener
--- | 2. `<fn>_` - no programmable way to remove the listener
+-- | 2. `<fn>_` - does not return a callback that can remove the listener
 -- |
 -- | ## Defining events emitted by an `EventEmitter`
 -- |
