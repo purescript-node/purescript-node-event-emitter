@@ -5,6 +5,7 @@
   , "either"
   , "foldable-traversable"
   , "functions"
+  , "nullable"
   , "prelude"
   , "refs"
   , "spec"

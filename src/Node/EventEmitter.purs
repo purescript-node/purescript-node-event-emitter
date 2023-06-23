@@ -40,7 +40,6 @@
 module Node.EventEmitter
   ( EventEmitter
   , new
-  , JsSymbol
   , SymbolOrStr
   , eventNames
   , getMaxListeners
@@ -67,6 +66,7 @@ import Data.Either (Either(..))
 import Data.Function.Uncurried (Fn3, runFn3)
 import Effect (Effect)
 import Effect.Uncurried (EffectFn1, EffectFn2, EffectFn3, EffectFn4, mkEffectFn1, mkEffectFn4, runEffectFn1, runEffectFn2, runEffectFn3, runEffectFn4)
+import Node.Symbol (JsSymbol)
 import Unsafe.Coerce (unsafeCoerce)
 
 foreign import data EventEmitter :: Type
@@ -78,12 +78,15 @@ foreign import data SymbolOrStr :: Type
 
 foreign import eventNamesImpl :: EventEmitter -> Array SymbolOrStr
 
-foreign import data JsSymbol :: Type
-
 eventNames :: EventEmitter -> Array (Either JsSymbol String)
 eventNames ee = map (\x -> runFn3 symbolOrStr Left Right x) $ eventNamesImpl ee
 
-foreign import symbolOrStr :: Fn3 (forall a. JsSymbol -> Either JsSymbol a) (forall b. String -> Either b String) SymbolOrStr (Either JsSymbol String)
+foreign import symbolOrStr
+  :: Fn3
+       (forall a. JsSymbol -> Either JsSymbol a)
+       (forall b. String -> Either b String)
+       SymbolOrStr
+       (Either JsSymbol String)
 
 foreign import getMaxListenersImpl :: EffectFn1 EventEmitter Int
 
