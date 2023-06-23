@@ -155,11 +155,17 @@ foreign import unsafeEmitFn :: forall f. EventEmitter -> f Boolean
 -- | Packs all the type information we need to call `on`/`once`/`prependListener`/`prependOnceListener`
 -- | with the correct callback function type.
 -- |
--- | **Naming convention**: If the name of an event is `foo`, 
+-- | **Naming convention**: 
+-- | If the name of an event is `foo`, 
 -- | the corresponding PureScript `EventHandle` value should be called `fooH`.
 -- | The `H` suffix is what prevent name conflicts in two situations:
 -- | 1. similarly-named methods (e.g. the `"close"` event and the `close` method)
 -- | 2. PureScript keywords (e.g. the `"data"` event)
+-- |
+-- | If an event, `foo`, can have two different kinds of callbacks, (e.g. See `Node.Stream`'s `data` event),
+-- | one of two things should happen:
+-- | 1. a suffix should follow the `H` to distinguish between the two (e.g. `dataHString`/`dataHBuffer`)
+-- | 2. a prime character (i.e. `'`) should follow the `H` to distinguish between the two (e.g. `dataH`/`dataH'`)
 data EventHandle :: Type -> Type -> Type -> Type
 data EventHandle emitterType pureScriptCallback javaScriptCallback =
   EventHandle String (pureScriptCallback -> javaScriptCallback)
