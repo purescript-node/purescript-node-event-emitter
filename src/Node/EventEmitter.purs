@@ -1,7 +1,7 @@
 -- | ## Handling events emitted by an `EventEmitter`
 -- |
 -- | One can add callbacks to an `EventEmitter` on two major axes:
--- | - whether listener is added to the front (i.e. `on`) or back (i.e. `prependListener`) of the array
+-- | - whether listener is added to the **end** (i.e. `on`) or **start** (i.e. `prependListener`) of the array
 -- | - whether a listener is automatically removed after the first event (i.e. `once` or `prependOnceListener`).
 -- |
 -- | This module provides functions for each of the above 4 callback-adding functions
