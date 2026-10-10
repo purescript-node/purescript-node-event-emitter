@@ -37,30 +37,22 @@ jobs:
             ${{ runner.os }}-
 
       - name: Setup PureScript tooling
-        run:
-          npm i -g purescript@latest purs-tidy@latest purescript-psa@latest spago@latest
+        run: npm ci
 
       - name: Cache PureScript dependencies
         uses: actions/cache@v3
         with:
-          key: ${{ runner.os }}-spago-${{ hashFiles('**/*.dhall') }}
+          key: ${{ runner.os }}-spago-${{ hashFiles('spago.yaml', 'spago.lock', 'package-lock.json') }}
           path: |
             .spago
             output
 
-      # Compile the library/project
-      #   censor-lib: ignore warnings emitted by dependencies
-      #   strict: convert warnings into errors
-      # Note: `purs-args` actually forwards these args to `psa`
       - name: Build the project
-        run: |
-          npx spago build --purs-args "--censor-lib --strict"
+        run: npm run build
 
       - name: Run tests
-        run: |
-          npx spago -x test.dhall test
+        run: npm test
 
       - name: Check Formatting
         if: runner.os == 'Linux'
-        run: |
-          purs-tidy check src test
+        run: npx --yes purs-tidy@0.11.1 check src test

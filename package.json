@@ -1,0 +1,12 @@
+{
+  "name": "purescript-node-event-emitter",
+  "private": true,
+  "scripts": {
+    "build": "spago build --pedantic-packages --strict",
+    "test": "spago test --pedantic-packages"
+  },
+  "devDependencies": {
+    "purescript": "0.15.16",
+    "spago": "1.0.4"
+  }
+}
